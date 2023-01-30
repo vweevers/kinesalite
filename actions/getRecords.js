@@ -1,5 +1,6 @@
 var crypto = require('crypto'),
     once = require('once'),
+    { EntryStream } = require('level-read-stream')
     db = require('../db')
 
 module.exports = function getRecords(store, data, cb) {
@@ -53,7 +54,7 @@ module.exports = function getRecords(store, data, cb) {
 
   store.getStream(streamName, function(err, stream) {
     if (err) {
-      if (err.name == 'NotFoundError' && err.body) {
+      if (err.code == 'LEVEL_NOT_FOUND' && err.body) {
         err.body.message = 'Shard ' + shardId + ' in stream ' + streamName +
           ' under account ' + metaDb.awsAccountId + ' does not exist'
       }
@@ -75,7 +76,7 @@ module.exports = function getRecords(store, data, cb) {
       lt: db.shardIxToHex(shardIx + 1),
     }
 
-    db.lazy(streamDb.createReadStream(opts), cb)
+    db.lazy(new EntryStream(streamDb, opts), cb)
       .take(data.Limit || 10000)
       .map(function(item) {
         lastItem = item.value

@@ -1,4 +1,5 @@
 var db = require('../db')
+var { EntryStream } = require('level-read-stream')
 
 module.exports = function getShardIterator(store, data, cb) {
 
@@ -16,7 +17,7 @@ module.exports = function getShardIterator(store, data, cb) {
 
   store.getStream(data.StreamName, function(err, stream) {
     if (err) {
-      if (err.name == 'NotFoundError' && err.body) {
+      if (err.code == 'LEVEL_NOT_FOUND' && err.body) {
         err.body.message = 'Shard ' + shardId + ' in stream ' + data.StreamName +
           ' under account ' + metaDb.awsAccountId + ' does not exist'
       }
@@ -91,7 +92,7 @@ module.exports = function getShardIterator(store, data, cb) {
         gt: db.shardIxToHex(shardIx),
         lt: db.shardIxToHex(shardIx + 1),
       }
-      return db.lazy(store.getStreamDb(data.StreamName).createReadStream(opts), cb)
+      return db.lazy(new EntryStream(store.getStreamDb(data.StreamName), opts), cb)
         .filter(function(item) { return item.value.ApproximateArrivalTimestamp >= data.Timestamp })
         .head(function(item) {
           iteratorSeq = item.key.split('/')[1]

@@ -1,8 +1,8 @@
 var crypto = require('crypto'),
     lazy = require('lazy'),
-    levelup = require('levelup'),
-    memdown = require('memdown'),
-    sub = require('subleveldown'),
+    { Level } = require('level'),
+    { MemoryLevel } = require('memory-level'),
+    { KeyStream, ValueStream } = require('level-read-stream'),
     lock = require('lock'),
     BigNumber = require('bignumber.js'),
     once = require('once')
@@ -33,8 +33,8 @@ function create(options) {
   if (options.updateStreamMs == null) options.updateStreamMs = 500
   if (options.shardLimit == null) options.shardLimit = 10
 
-  var db = levelup(options.path ? require('leveldown')(options.path) : memdown()),
-      metaDb = sub(db, 'meta', {valueEncoding: 'json'}),
+  var db = options.path ? new Level(options.path) : new MemoryLevel(),
+      metaDb = db.sublevel('meta', {valueEncoding: 'json'}),
       streamDbs = []
 
   metaDb.lock = lock.Lock() // eslint-disable-line new-cap
@@ -45,7 +45,7 @@ function create(options) {
 
   function getStreamDb(name) {
     if (!streamDbs[name]) {
-      streamDbs[name] = sub(db, 'stream-' + name, {valueEncoding: 'json'})
+      streamDbs[name] = db.sublevel('stream-' + name, {valueEncoding: 'json'})
       streamDbs[name].lock = lock.Lock() // eslint-disable-line new-cap
     }
     return streamDbs[name]
@@ -55,7 +55,9 @@ function create(options) {
     cb = once(cb)
     var streamDb = getStreamDb(name)
     delete streamDbs[name]
-    lazyStream(streamDb.createKeyStream(), cb).join(function(keys) {
+
+    // TODO: use clear() instead
+    lazyStream(new KeyStream(streamDb), cb).join(function(keys) {
       streamDb.batch(keys.map(function(key) { return {type: 'del', key: key} }), cb)
     })
   }
@@ -64,7 +66,7 @@ function create(options) {
     cb = once(cb)
     metaDb.get(name, function(err, stream) {
       if (err) {
-        if (err.name == 'NotFoundError') {
+        if (err.code == 'LEVEL_NOT_FOUND') {
           err.statusCode = 400
           err.body = {
             __type: 'ResourceNotFoundException',
@@ -268,7 +270,7 @@ function createShardIterator(streamName, shardId, seq) {
 
 // Sum shards that haven't closed yet
 function sumShards(store, cb) {
-  exports.lazy(store.metaDb.createValueStream(), cb)
+  exports.lazy(new ValueStream(store.metaDb), cb)
     .map(function(stream) {
       return stream.Shards.filter(function(shard) {
         return shard.SequenceNumberRange.EndingSequenceNumber == null

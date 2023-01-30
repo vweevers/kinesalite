@@ -65,7 +65,7 @@ module.exports = function mergeShards(store, data, cb) {
             })
 
             store.getStream(key, function(err, stream) {
-              if (err && err.name == 'NotFoundError') return cb()
+              if (err && err.code == 'LEVEL_NOT_FOUND') return cb()
               if (err) return cb(err)
 
               var now = Date.now()

@@ -12,7 +12,7 @@ module.exports = function createStream(store, data, cb) {
     cb = release(cb)
 
     metaDb.get(key, function(err) {
-      if (err && err.name != 'NotFoundError') return cb(err)
+      if (err && err.code != 'LEVEL_NOT_FOUND') return cb(err)
       if (!err)
         return cb(db.clientError('ResourceInUseException',
           'Stream ' + key + ' under account ' + metaDb.awsAccountId + ' already exists.'))
